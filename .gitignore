@@ -1,0 +1,16 @@
+.dub
+docs.json
+__dummy.html
+docs/
+gensimnet.so
+gensimnet.dylib
+gensimnet.dll
+gensimnet.a
+gensimnet.lib
+gensimnet-test-*
+*.exe
+*.o
+*.obj
+*.lst
+
+build/
