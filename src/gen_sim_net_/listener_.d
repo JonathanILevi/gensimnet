@@ -5,10 +5,12 @@ import vibe.core.net;
 import eventcore.driver	: IOMode;
 
 import core.time;
-import gen_sim_net_.connection_;
+import gen_sim_net_._to_msg_;
 import std.range.interfaces : InputRange;
 
 import std.experimental.logger;
+
+public import gen_sim_net_.connection_;
 
 class Listener {
 	this(ushort port) {
@@ -23,7 +25,7 @@ class Listener {
 			log("Socket disconnected");
 		}
 		void main() {
-			listeners = listenTCP(1234, &handleConnection);
+			listeners = listenTCP(port, &handleConnection);
 			listeners.log;
 		}
 		main();
@@ -35,7 +37,7 @@ class Listener {
 	}
 	private {
 		TCPListener[]	listeners	;
-		Connection[]	newConnections	= []	; 
+		Connection[]	newConnections	= []	;
 	}
 }
 
@@ -45,7 +47,7 @@ private {
 			this.socket = socket;
 			this.toMsg = new ToMsg(
 				(){
-					if (socket.dataAvailableForRead) {
+					if (connected && socket.dataAvailableForRead) {
 						enum bufferSize = 64;
 						ubyte[] buffer = new ubyte[bufferSize];
 						auto length = socket.read(buffer, IOMode.once);
@@ -74,7 +76,7 @@ private {
 		public {
 			void send(const(ubyte[]) msg) {
 				if (connected) {
-					socket.write(msg);
+					socket.write(cast(ubyte)(msg.length+1)~msg);
 				}
 			}
 			alias put = send;
@@ -83,83 +85,12 @@ private {
 		//---Receive
 		public {
 			InputRange!(const(ubyte)[]) msgs() {
-				return new Range(toMsg);
-			}
-			private class Range : InputRange!(const(ubyte)[]) {
-				@property bool empty() {
-					if (connected) {
-						return toMsg.empty;
-					}
-					return true;
-				}
-				@property const(ubyte)[] front() {
-					return toMsg.front;
-				}
-				const(ubyte)[] moveFront() {
-					return front;
-				}
-				void popFront() {
-					return toMsg.popFront;
-				}
-				int opApply(scope int delegate(ulong, const(ubyte)[]) dg) {
-					size_t i = 0;
-					foreach (msg; toMsg) {
-						if (dg(i, msg)) {
-							return 1;
-						}
-						i++;
-					}
-					return 1;
-				}
-				int opApply(scope int delegate(const(ubyte)[]) dg) {
-					foreach (msg; toMsg) {
-						if (dg(msg)) {
-							return 1;
-						}
-					}
-					return 1;
-				}
-				private this(ToMsg toMsg) {this.toMsg = toMsg;}
-				private ToMsg toMsg;
+				return createToMsgRange(toMsg);
 			}
 		}
 	}
 }
 
-
-class ToMsg {
-	this(ubyte[] delegate() read, ptrdiff_t delegate(ubyte[]) getMsgLen) {
-		this.read	= read	;
-		this.getMsgLen	= getMsgLen	;
-	}
-	
-	
-	@property bool empty() {
-		buffer ~= this.read();
-		for (ptrdiff_t msgLen=getMsgLen(buffer); msgLen>0; msgLen=getMsgLen(buffer)) {
-			if (msgLen>buffer.length) {
-				break;
-			}
-			msgs ~= buffer[0..msgLen];
-			buffer = buffer[msgLen..$];
-		}
-		return msgs.length==0;
-	}
-	@property const(const(ubyte)[]) front() {
-		return msgs[0];
-	}
-	void popFront() {
-		msgs = msgs[1..$];
-	}
-	
-	private {
-		ubyte[] delegate()	read	;
-		ptrdiff_t delegate(ubyte[])	getMsgLen	;
-		
-		ubyte[]	buffer	;
-		ubyte[][]	msgs	;
-	}
-}
 
 
 
